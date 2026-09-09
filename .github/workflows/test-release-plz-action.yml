@@ -1,0 +1,15 @@
+name: Test release-plz action
+on:
+  pull_request:
+    paths: ['release-plz/**', '.github/workflows/test-release-plz-action.yml']
+  push:
+    branches: [main]
+    paths: ['release-plz/**', '.github/workflows/test-release-plz-action.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -m unittest discover -s release-plz/tests -v

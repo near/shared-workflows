@@ -75,7 +75,9 @@ runs:
 
     - name: Install release-plz
       shell: bash
-      run: cargo-binstall release-plz@${{ inputs.release-plz-version }} --no-confirm
+      env:
+        RELEASE_PLZ_VERSION: ${{ inputs.release-plz-version }}
+      run: cargo-binstall "release-plz@$RELEASE_PLZ_VERSION" --no-confirm
 
     - name: Install Rust toolchain
       if: inputs.crate-toolchain-version != '' || inputs.crate-build-target-arch != '' || env.RELEASE_PLZ_BUILD_ARCH != ''
@@ -90,79 +92,71 @@ runs:
     - name: Run release-plz
       id: release-plz
       shell: bash
+      env:
+        RELEASE_PLZ_COMMAND: ${{ inputs.command }}
+        RELEASE_PLZ_CONFIG: ${{ inputs.config }}
+        RELEASE_PLZ_TOKEN: ${{ inputs.token }}
+        RELEASE_PLZ_MANIFEST_PATH: ${{ inputs.manifest-path }}
+        RELEASE_PLZ_VERBOSE: ${{ inputs.verbose }}
+        RELEASE_PLZ_DRY_RUN: ${{ inputs.dry-run }}
+        RELEASE_PLZ_TARGET: ${{ inputs.crate-build-target-arch }}
       run: |
-        if [[ -n "${{ inputs.crate-build-target-arch }}" || -n "${RELEASE_PLZ_BUILD_ARCH}" ]]
-        then
-          BUILD_TARGET="${{ inputs.crate-build-target-arch }}"
-          BUILD_TARGET="${BUILD_TARGET:-${RELEASE_PLZ_BUILD_ARCH:-}}"
+        BUILD_TARGET="${RELEASE_PLZ_TARGET:-${RELEASE_PLZ_BUILD_ARCH:-}}"
+        if [[ -n "$BUILD_TARGET" ]]; then
+          export CARGO_BUILD_TARGET="$BUILD_TARGET"
         fi
 
-        if [[ -n "${{ inputs.config }}" ]]
+        if [[ -n "$RELEASE_PLZ_CONFIG" ]]
         then
-            echo "using config from '${{ inputs.config }}'"
+            echo "using config from '$RELEASE_PLZ_CONFIG'"
             # Use arrays so that inputs can contain spaces
-            CONFIG_PATH=("--config" "${{ inputs.config }}")
+            CONFIG_PATH=("--config" "$RELEASE_PLZ_CONFIG")
         else
             CONFIG_PATH=()
         fi
 
-        if [[ -n "${{ inputs.token }}" ]]
+        if [[ -n "$RELEASE_PLZ_TOKEN" ]]
         then
             echo "using custom registry token"
-            TOKEN=("--token" "${{ inputs.token }}")
+            TOKEN=("--token" "$RELEASE_PLZ_TOKEN")
         else
             TOKEN=()
         fi
 
-        if [[ -n "${{ inputs.manifest-path }}" ]]
+        if [[ -n "$RELEASE_PLZ_MANIFEST_PATH" ]]
         then
-            echo "using manifest path from '${{ inputs.manifest-path }}'"
+            echo "using manifest path from '$RELEASE_PLZ_MANIFEST_PATH'"
             # Use arrays so that inputs can contain spaces
-            MANIFEST_PATH=("--manifest-path" "${{ inputs.manifest-path }}")
+            MANIFEST_PATH=("--manifest-path" "$RELEASE_PLZ_MANIFEST_PATH")
         else
             MANIFEST_PATH=()
         fi
 
 
-        if [[ -n "${{ inputs.verbose }}" ]]
+        if [[ "$RELEASE_PLZ_VERBOSE" == "true" ]]
         then
             VERBOSE=("-v")
         else
             VERBOSE=()
         fi
 
-        if [[ -n "${{ inputs.dry-run }}" ]]
+        if [[ "$RELEASE_PLZ_DRY_RUN" == "true" ]]
         then
             DRY_RUN=("--dry-run")
         else
             DRY_RUN=()
         fi
 
-        if [[ "${{ inputs.command }}" == "release-pr" ]]
+        if [[ "$RELEASE_PLZ_COMMAND" == "release-pr" ]]
         then
             echo "-- Running release-plz release-pr --"
-            release_pr_stderr=$(mktemp)
-            if ! release_pr_output=$(release-plz release-pr \
+            release_pr_output=$(release-plz release-pr \
                 --git-token "${GITHUB_TOKEN}" \
                 --repo-url "https://github.com/${GITHUB_REPOSITORY}" \
                 "${CONFIG_PATH[@]}" \
                 "${MANIFEST_PATH[@]}" \
                 "${VERBOSE[@]}" \
-                -o json 2>"$release_pr_stderr")
-            then
-                release_pr_error=$(cat "$release_pr_stderr")
-                # GitHub can return 422 for no-op/unprocessable release-pr calls.
-                # Treat this as "nothing to create" instead of failing the whole action.
-                if [[ "$release_pr_error" == *"422"* ]]; then
-                    echo "::warning::release-plz release-pr failed with HTTP 422; continuing with no PRs created."
-                    release_pr_output='{"prs":[]}'
-                else
-                    echo "$release_pr_error" >&2
-                    rm -f "$release_pr_stderr"
-                    exit 1
-                fi
-            fi
-            rm -rf "$release_pr_stderr"
+                -o json)
             echo "release_pr_output: $release_pr_output"
             prs=$(echo "$release_pr_output" | jq -c .prs)
             echo "prs=$prs" >> "$GITHUB_OUTPUT"
@@ -176,11 +170,10 @@ runs:
             fi
             echo "pr=$first_pr" >> "$GITHUB_OUTPUT"
             echo "prs_created=$prs_created" >> "$GITHUB_OUTPUT"
-        elif [[ "${{ inputs.command }}" == "release" ]]
+        elif [[ "$RELEASE_PLZ_COMMAND" == "release" ]]
         then
             echo "-- Running release-plz release --"
-            release_output=$(CARGO_BUILD_TARGET="${BUILD_TARGET:-}" \
-                release-plz release  \
+            release_output=$(release-plz release  \
                 --git-token "${GITHUB_TOKEN}" \
                 "${CONFIG_PATH[@]}" \
                 "${MANIFEST_PATH[@]}" \
@@ -189,7 +182,7 @@ runs:
                 "${DRY_RUN[@]}" \
                 -o json)
             echo "release_output: $release_output"
-            releases=$(echo $release_output | jq -c .releases)
+            releases=$(echo "$release_output" | jq -c .releases)
             echo "releases=$releases" >> "$GITHUB_OUTPUT"
             releases_length=$(echo "$releases" | jq 'length')
             if [ "$releases_length" != "0" ]; then
@@ -199,6 +192,6 @@ runs:
             fi
             echo "releases_created=$releases_created" >> "$GITHUB_OUTPUT"
         else
-            echo "::error::Unknown command '${{ inputs.command }}'. Accepted values: 'release-pr', 'release'."
+            echo "::error::Unknown command '$RELEASE_PLZ_COMMAND'. Accepted values: 'release-pr', 'release'."
             exit 1
         fi

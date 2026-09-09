@@ -2,7 +2,28 @@
 
 Reusable release automation for NEAR Rust repositories.
 
-## Release-plz
+## Release-plz action
+
+Use the composite action inside your existing release jobs:
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 0
+    persist-credentials: false
+- uses: dtolnay/rust-toolchain@stable
+- uses: near/shared-workflows/release-plz@main
+  with:
+    command: release
+  env:
+    GITHUB_TOKEN: ${{ secrets.NEARPROTOCOL_CI_PR_ACCESS }}
+```
+
+For trusted publishing, grant the job `id-token: write` and configure crates.io for your repository and workflow filename. Use `command: release-pr` in the job that opens release PRs. See the [action documentation](release-plz/README.md) for inputs and examples.
+
+The action is currently available on `main`; the existing `v1` tag contains only the reusable workflow.
+
+## Reusable release workflow
 
 Keep the caller in `.github/workflows/release-plz.yml` so existing crates.io trusted publisher registrations continue to match. Configure each crate for its own repository and this caller filename, with no environment.
 

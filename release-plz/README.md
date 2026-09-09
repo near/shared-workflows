@@ -58,7 +58,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release-pr
           # cargo-toolchain-version: "stable" # <- enables downloading a rust inside action without specifying action
@@ -77,7 +77,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release
           # cargo-toolchain-version: "stable" # <- enables downloading a rust inside action without specifying action
@@ -118,7 +118,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release-pr
         env:
@@ -137,7 +137,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release
         env:
@@ -169,7 +169,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release
           token: ${{ secrets.PRIVATE_REGISTRY_TOKEN }}
@@ -205,7 +205,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release-pr
           crate-build-target-arch: "wasm32-unknown-unknown"
@@ -226,7 +226,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release
           crate-build-target-arch: "wasm32-unknown-unknown"
@@ -259,7 +259,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release
           config: crates/my-crate/release-plz.toml
@@ -294,7 +294,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: near/actions/release-plz@main
+      - uses: near/shared-workflows/release-plz@main
         with:
           command: release
           dry-run: "true"
@@ -328,7 +328,7 @@ jobs:
 
       - name: Run release-plz
         id: release-plz
-        uses: near/actions/release-plz@main
+        uses: near/shared-workflows/release-plz@main
         with:
           command: release
           crate-toolchain-version: "stable"
