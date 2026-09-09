@@ -1,0 +1,87 @@
+name: Release-plz
+
+on:
+  workflow_call:
+    inputs:
+      apt-packages:
+        description: Space-separated Ubuntu packages needed to build the crates.
+        type: string
+        default: ''
+    secrets:
+      pr-token:
+        description: Bot token that lets release PRs trigger repository CI.
+        required: true
+      release-token:
+        description: Optional bot token for tags that must trigger downstream workflows.
+        required: false
+
+permissions: {}
+
+jobs:
+  release-pr:
+    name: Release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-pr-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build dependencies
+        if: inputs.apt-packages != ''
+        env:
+          APT_PACKAGES: ${{ inputs.apt-packages }}
+        run: |
+          read -r -a packages <<< "$APT_PACKAGES"
+          sudo apt-get update
+          sudo apt-get install --assume-yes -- "${packages[@]}"
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.pr-token }}
+
+  release:
+    name: Release-plz release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+      attestations: write
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    concurrency:
+      group: release-plz-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build dependencies
+        if: inputs.apt-packages != ''
+        env:
+          APT_PACKAGES: ${{ inputs.apt-packages }}
+        run: |
+          read -r -a packages <<< "$APT_PACKAGES"
+          sudo apt-get update
+          sudo apt-get install --assume-yes -- "${packages[@]}"
+      - uses: release-plz/action@v0.5
+        id: release-plz
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.release-token || github.token }}
+      - name: Attest published archives
+        if: steps.release-plz.outputs.releases_created == 'true'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: target/package/**/*.crate
