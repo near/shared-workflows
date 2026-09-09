@@ -179,7 +179,7 @@ runs:
         elif [[ "${{ inputs.command }}" == "release" ]]
         then
             echo "-- Running release-plz release --"
-            release_output=$(CARGO_BUILD_TARGET="${BUILD_TARGET:-}" \
+            release_output=$(env ${BUILD_TARGET:+"CARGO_BUILD_TARGET=$BUILD_TARGET"} \
                 release-plz release  \
                 --git-token "${GITHUB_TOKEN}" \
                 "${CONFIG_PATH[@]}" \
