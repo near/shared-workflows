@@ -1,0 +1,204 @@
+name: release-plz
+author: Near DevEx Team
+description: Update version and changelog based on semantic versioning and conventional commits
+
+branding:
+  icon: "zap"
+  color: "yellow"
+
+inputs:
+  command:
+    description: "The release-plz command to run. Accepted values: `release-pr`, `release`."
+    required: true
+  config:
+    description: "Config file location. If not present, the default `release-plz.toml` is used."
+    required: false
+  manifest-path:
+    description: "Path to the `Cargo.toml` of the project to update."
+    required: false
+  release-plz-version:
+    description: "`release-plz` version to use. (Default: `0.3.157`)."
+    default: "0.3.157"
+    required: false
+  cargo-semver-checks-version:
+    description: "`cargo-semver-checks` version to use. (Default: `0.47.0`)"
+    default: "0.47.0"
+    required: false
+  cargo-binstall-version:
+    description: "`cargo-binstall` version to install and use. (Default: `1.18.1`)"
+    default: "1.18.1"
+    required: false
+  token:
+    description: "Token used to publish to the cargo registry"
+    required: false
+  verbose:
+    description: "Print module and source locations in logs."
+    required: false
+  dry-run:
+    description:
+      "Add the `--dry-run` flag to the `release` command. (the flag isn't added to the `release-pr` command).
+      Useful if you're only interested in whether or not a release (pr) would be created."
+    required: false
+  crate-build-target-arch:
+    description: "Build target architecture triple for the crate (`x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `wasm32-unknown-unknown`, etc.). (Default: host platform's triple)"
+    required: false
+  crate-toolchain-version:
+    description: "Toolchain that is used in order to build and publish the crate"
+    required: false
+outputs:
+  pr:
+    description: "The release PR opened by `release-plz`"
+    value: ${{ steps.release-plz.outputs.pr }}
+  releases:
+    description: "The JSON output of the `release` command."
+    value: ${{ steps.release-plz.outputs.releases }}
+  prs_created:
+    description: "Whether release-plz created any release PR."
+    value: ${{ steps.release-plz.outputs.prs_created }}
+  releases_created:
+    description: "Whether release-plz released any package."
+    value: ${{ steps.release-plz.outputs.releases_created }}
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Install cargo-semver-checks
+      uses: taiki-e/install-action@6e4b50d359005dacdb018fa32c03bc35522c6616 # v2.75.12
+      with:
+        tool: cargo-semver-checks@${{ inputs.cargo-semver-checks-version }}
+
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
+      env:
+        BINSTALL_VERSION: ${{ inputs.cargo-binstall-version }}
+
+    - name: Install release-plz
+      shell: bash
+      run: cargo-binstall release-plz@${{ inputs.release-plz-version }} --no-confirm
+
+    - name: Install Rust toolchain
+      if: inputs.crate-toolchain-version != '' || inputs.crate-build-target-arch != '' || env.RELEASE_PLZ_BUILD_ARCH != ''
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.crate-toolchain-version || 'stable' }}
+        targets: ${{ inputs.crate-build-target-arch || env.RELEASE_PLZ_BUILD_ARCH || '' }}
+
+    - name: Configure git user from GitHub token
+      uses: release-plz/git-config@59144859caf016f8b817a2ac9b051578729173c4 
+
+    - name: Run release-plz
+      id: release-plz
+      shell: bash
+      run: |
+        if [[ -n "${{ inputs.crate-build-target-arch }}" || -n "${RELEASE_PLZ_BUILD_ARCH}" ]]
+        then
+          BUILD_TARGET="${{ inputs.crate-build-target-arch }}"
+          BUILD_TARGET="${BUILD_TARGET:-${RELEASE_PLZ_BUILD_ARCH:-}}"
+        fi
+
+        if [[ -n "${{ inputs.config }}" ]]
+        then
+            echo "using config from '${{ inputs.config }}'"
+            # Use arrays so that inputs can contain spaces
+            CONFIG_PATH=("--config" "${{ inputs.config }}")
+        else
+            CONFIG_PATH=()
+        fi
+
+        if [[ -n "${{ inputs.token }}" ]]
+        then
+            echo "using custom registry token"
+            TOKEN=("--token" "${{ inputs.token }}")
+        else
+            TOKEN=()
+        fi
+
+        if [[ -n "${{ inputs.manifest-path }}" ]]
+        then
+            echo "using manifest path from '${{ inputs.manifest-path }}'"
+            # Use arrays so that inputs can contain spaces
+            MANIFEST_PATH=("--manifest-path" "${{ inputs.manifest-path }}")
+        else
+            MANIFEST_PATH=()
+        fi
+
+
+        if [[ -n "${{ inputs.verbose }}" ]]
+        then
+            VERBOSE=("-v")
+        else
+            VERBOSE=()
+        fi
+
+        if [[ -n "${{ inputs.dry-run }}" ]]
+        then
+            DRY_RUN=("--dry-run")
+        else
+            DRY_RUN=()
+        fi
+
+        if [[ "${{ inputs.command }}" == "release-pr" ]]
+        then
+            echo "-- Running release-plz release-pr --"
+            release_pr_stderr=$(mktemp)
+            if ! release_pr_output=$(release-plz release-pr \
+                --git-token "${GITHUB_TOKEN}" \
+                --repo-url "https://github.com/${GITHUB_REPOSITORY}" \
+                "${CONFIG_PATH[@]}" \
+                "${MANIFEST_PATH[@]}" \
+                "${VERBOSE[@]}" \
+                -o json 2>"$release_pr_stderr")
+            then
+                release_pr_error=$(cat "$release_pr_stderr")
+                # GitHub can return 422 for no-op/unprocessable release-pr calls.
+                # Treat this as "nothing to create" instead of failing the whole action.
+                if [[ "$release_pr_error" == *"422"* ]]; then
+                    echo "::warning::release-plz release-pr failed with HTTP 422; continuing with no PRs created."
+                    release_pr_output='{"prs":[]}'
+                else
+                    echo "$release_pr_error" >&2
+                    rm -f "$release_pr_stderr"
+                    exit 1
+                fi
+            fi
+            rm -rf "$release_pr_stderr"
+            echo "release_pr_output: $release_pr_output"
+            prs=$(echo "$release_pr_output" | jq -c .prs)
+            echo "prs=$prs" >> "$GITHUB_OUTPUT"
+            prs_length=$(echo "$prs" | jq 'length')
+            if [ "$prs_length" != "0" ]; then
+                prs_created=true
+                first_pr=$(echo "$prs" | jq -c .[0])
+            else
+                prs_created=false
+                first_pr="{}"
+            fi
+            echo "pr=$first_pr" >> "$GITHUB_OUTPUT"
+            echo "prs_created=$prs_created" >> "$GITHUB_OUTPUT"
+        elif [[ "${{ inputs.command }}" == "release" ]]
+        then
+            echo "-- Running release-plz release --"
+            release_output=$(CARGO_BUILD_TARGET="${BUILD_TARGET:-}" \
+                release-plz release  \
+                --git-token "${GITHUB_TOKEN}" \
+                "${CONFIG_PATH[@]}" \
+                "${MANIFEST_PATH[@]}" \
+                "${TOKEN[@]}" \
+                "${VERBOSE[@]}" \
+                "${DRY_RUN[@]}" \
+                -o json)
+            echo "release_output: $release_output"
+            releases=$(echo $release_output | jq -c .releases)
+            echo "releases=$releases" >> "$GITHUB_OUTPUT"
+            releases_length=$(echo "$releases" | jq 'length')
+            if [ "$releases_length" != "0" ]; then
+                releases_created=true
+            else
+                releases_created=false
+            fi
+            echo "releases_created=$releases_created" >> "$GITHUB_OUTPUT"
+        else
+            echo "::error::Unknown command '${{ inputs.command }}'. Accepted values: 'release-pr', 'release'."
+            exit 1
+        fi
