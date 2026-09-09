@@ -53,7 +53,8 @@ print(os.environ['CLI_OUTPUT'])
                 with self.subTest(command=command, target=target):
                     result, call, _ = self.run_action(command, overrides)
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(call['target'], target)
+                    self.assertEqual(call['target'], target if command == 'release'
+                                     else overrides.get('CARGO_BUILD_TARGET'))
 
     def test_boolean_flags(self):
         for value in ['', 'false', 'true']:

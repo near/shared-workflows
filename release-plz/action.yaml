@@ -102,10 +102,6 @@ runs:
         RELEASE_PLZ_TARGET: ${{ inputs.crate-build-target-arch }}
       run: |
         BUILD_TARGET="${RELEASE_PLZ_TARGET:-${RELEASE_PLZ_BUILD_ARCH:-}}"
-        if [[ -n "$BUILD_TARGET" ]]; then
-          export CARGO_BUILD_TARGET="$BUILD_TARGET"
-        fi
-
         if [[ -n "$RELEASE_PLZ_CONFIG" ]]
         then
             echo "using config from '$RELEASE_PLZ_CONFIG'"
@@ -173,6 +169,9 @@ runs:
         elif [[ "$RELEASE_PLZ_COMMAND" == "release" ]]
         then
             echo "-- Running release-plz release --"
+            if [[ -n "$BUILD_TARGET" ]]; then
+                export CARGO_BUILD_TARGET="$BUILD_TARGET"
+            fi
             release_output=$(release-plz release  \
                 --git-token "${GITHUB_TOKEN}" \
                 "${CONFIG_PATH[@]}" \
