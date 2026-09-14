@@ -15,7 +15,13 @@ on:
 permissions: {}
 
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: validate
     uses: near/shared-workflows/.github/workflows/release-plz.yml@v1
     permissions:
       contents: write
@@ -26,12 +32,10 @@ jobs:
       pr-token: ${{ secrets.NEARPROTOCOL_CI_PR_ACCESS }}
 ```
 
-If releases depend on CI, keep a reusable CI job in the caller and add `needs: validate` to `release`.
+The workflow creates release PRs and publishes through Release-plz's native crates.io OIDC support. It downloads each published archive back from crates.io, checks it is byte-identical to the one built in the job, and attests it. It does not need a Cargo registry token. Release-plz uses its defaults unless the repository supplies `release-plz.toml` or `.release-plz.toml`.
 
-The workflow creates release PRs and publishes through Release-plz's native crates.io OIDC support. It attests the original published archives. It does not need a Cargo registry token. Release-plz uses its defaults unless the repository supplies `release-plz.toml` or `.release-plz.toml`.
+- `pr-token` is required: use a bot token so release PRs trigger CI and satisfy branch protection.
+- `apt-packages`: optional space-separated Ubuntu build dependencies, such as `libudev-dev`.
+- `release-token`: optional bot token for tags that must trigger downstream workflows. Otherwise publishing uses the caller's `GITHUB_TOKEN`.
 
-- `pr-token` is required: use a bot token so release PRs trigger CI.
-- `release-token` is optional: pass a bot token when tags or releases must trigger downstream workflows. Otherwise publishing uses the caller's `GITHUB_TOKEN` for GitHub operations.
-- `apt-packages` is optional: a space-separated list of Ubuntu build dependencies, such as `libudev-dev`.
-
-Release PR updates can cancel superseded updates. In-flight publishing is never cancelled by concurrency. The caller controls its triggers, CI dependencies, and granted permissions.
+Release PR updates can cancel superseded updates. In-flight publishing is never cancelled by concurrency. Dependabot keeps the actions current.
