@@ -80,8 +80,19 @@ jobs:
           command: release
         env:
           GITHUB_TOKEN: ${{ secrets.release-token || github.token }}
+      - name: Verify published archives match this build
+        if: steps.release-plz.outputs.releases_created == 'true'
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          jq -r '.[] | "\(.package_name) \(.version)"' <<< "$RELEASES" | while read -r name version; do
+            crate="$name-$version.crate"
+            curl --fail --silent --show-error --location --retry 12 --retry-delay 10 --retry-all-errors \
+              --output "$RUNNER_TEMP/$crate" "https://static.crates.io/crates/$name/$crate"
+            cmp "target/package/$crate" "$RUNNER_TEMP/$crate"
+          done
       - name: Attest published archives
         if: steps.release-plz.outputs.releases_created == 'true'
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
-          subject-path: target/package/**/*.crate
+          subject-path: target/package/*.crate
